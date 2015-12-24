@@ -1,0 +1,64 @@
+Weight Lifting Excersize Manner Prediction
+========================================================
+### **Practical Machine Learning, By Jidan Zhong, 2015-Dec-24**
+
+### **Overview**
+
+Six young healthy participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions: exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E). In this report, we predicted the manner in which they did the exercise. Using a random forest model, the average 10-fold cross validation accuracy is 99.93%. We also applied the prediction model to predict 20 different test cases provided by the researchers, which resulted in a 100% accuracy. 
+
+### **Data Loading & Basic summary**
+
+```{r,cache=TRUE}
+setwd('~/Documents/practicalmachinelearning')
+data.train <- read.csv("./pml-training.csv", na.strings = c("NA", "#DIV/0!", ""))
+data.test <- read.csv("./pml-testing.csv", na.strings = c("NA", "#DIV/0!", ""))
+```
+
+First, all the variables with too many missing data should be excluded.
+```{r,cache=TRUE}
+naindex <- sapply(data.train,function(x) {sum(is.na(x))})>1000
+data.trainnew <- data.train[,!naindex] # only keep the ones without lots of NAs
+str(data.trainnew)
+```
+Through checking the properties of the variables, we found that most of the variables were directly related to the manner of the excersize, e.g. "accel_forearm_x", "gyros_dumbbell_x", etc. However, we need to do more investigation on the first 7 variables to decide whether or not to include them into the model. We excluded the 1st and 5th variables as they are just index of the observations and time of doing the excersize, which should not be influencing the result of the "classe" based on the experiment description.
+```{r,fig.width=8, fig.height=14,cache=TRUE}
+par(mfrow=c(3,2))
+plot(data.trainnew$classe,data.train$user_name, xlab="Excersice Manner", ylab="User Name",main="Excercize Manner vs. Users") # 2
+plot(data.trainnew$classe,data.train$raw_timestamp_part_1/1000,xlab="Excersice Manner", ylab="Raw Timestamp 1",main="Excercize Manner vs. Raw Timestamp 1") # 3, divide by 1000 in case of overflow
+plot(data.trainnew$classe,data.train$raw_timestamp_part_2,xlab="Excersice Manner", ylab="Raw Timestamp 2",main="Excercize Manner vs. Raw Timestamp 2") # 4
+plot(data.trainnew$classe,data.train$new_window,xlab="Excersice Manner", ylab="New Window",main="Excercize Manner vs. New Window") # 6
+plot(data.trainnew$classe,data.train$num_window,xlab="Excersice Manner", ylab="Num Window",main="Excercize Manner vs. Num Window") # 7
+```
+
+Figure 1. Relationship between "classe" and variables.
+
+### **Model Generation, Training and Validation**
+
+By looking at the figures, we think that the "user_name", "raw_timestamp_part_1","raw_timestamp_part_2" and "new_window" show similar distribution across the five classes, while there are some differences between classes for "num_window". Thus, we decided to include the 7th variables onwards for the machine learning. We used random forest method to build the model. During the training, we applied out-of-bag method to train the model.To estimate the out of sample error and cross validate this method, we did a 10-fold cross validation. 
+```{r, cache=TRUE}
+suppressWarnings(library(caret))
+data.trainnew2 <- data.trainnew[,7:60]
+set.seed(1000)
+id <- createFolds(data.trainnew2$classe,k=10,list=FALSE)
+i1 <- 1:10
+for (jj in 1:10)
+  {
+  train1 <- data.trainnew2[id!=jj,]
+  test1 <- data.trainnew2[id==jj,]
+  modfit1 <- train(classe ~ ., method="rf", trControl= trainControl(method="oob"), data=train1,allowParallel=TRUE)
+  pr1 <- predict(modfit1, newdata=test1)
+  i1[jj] <- sum(pr1 == test1$classe)/length(pr1)
+  }
+```
+
+The average out of sample accuracy from cross validation is 99.93%. with a standard deviation of 0.06%, which is quite low. The range for the 10 accuracies is 99.85% to 100%, with the median as 99.90%. Thus, we would expect the out of sample error to be around 0.07%, with a standard deviation of 0.06%. 
+
+As the models from above performed consistantly well with different training and testing data set, we applied the last model to predict the "classe" of the 20 different test cases provided by the same researchers.
+```{r}
+p1 <- predict(modfit1, newdata=data.test)
+print(p1)
+```
+
+The resulted accurcary for the 20 test cases is 100%. 
+
+This work used the data from http://groupware.les.inf.puc-rio.br/har.
